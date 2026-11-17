@@ -72,9 +72,18 @@
   else if (hoje && ag.min < emMin(hoje.fecha)) { estado = 'aberto'; resto = ', fecha às ' + hoje.fecha; }
   else { estado = 'fechado'; resto = ', abre ' + proximaAbertura(ag.dia) + ' (plantão 24h)'; }
   document.querySelectorAll('[data-status]').forEach(function (el) {
-    el.setAttribute('data-estado', estado);
     var t = el.querySelector('[data-status-txt]');
-    if (t) { t.textContent = estado === 'aberto' ? 'Aberto agora' : 'Fechado agora'; var r = document.createElement('span'); r.className = 'st-resto'; r.textContent = resto; t.appendChild(r); }
+    if (!t) return;
+    if (!el.classList.contains('status-grande')) {
+      /* Pílula do topo: clínica 24h — sempre disponível para emergência. */
+      el.setAttribute('data-estado', 'aberto');
+      t.textContent = 'Plantão 24 horas';
+      return;
+    }
+    /* Status grande (seção Horário): aberto/fechado calculado + detalhe. */
+    el.setAttribute('data-estado', estado);
+    t.textContent = estado === 'aberto' ? 'Aberto agora' : 'Fechado agora';
+    var r = document.createElement('span'); r.className = 'st-resto'; r.textContent = resto; t.appendChild(r);
   });
   var corpo = document.querySelector('[data-horario]');
   if (corpo) {
@@ -118,6 +127,9 @@
   var topo = document.querySelector('.topo');
   var aoRolar = function () { topo.classList.toggle('rolou', window.scrollY > 20); };
   window.addEventListener('scroll', aoRolar, { passive: true }); aoRolar();
+  /* offset das âncoras = altura real do header (reforço para o caso sem Lenis) */
+  var ajustaOffset = function () { document.documentElement.style.scrollPaddingTop = (topo.offsetHeight + 14) + 'px'; };
+  window.addEventListener('resize', ajustaOffset); ajustaOffset();
 
   var abre = document.querySelector('.abre-menu'), menu = document.getElementById('menu');
   if (abre && menu) {
@@ -199,7 +211,7 @@
       a.addEventListener('click', function (e) {
         var id = a.getAttribute('href'); if (id.length < 2) return;
         var alvo = document.querySelector(id); if (!alvo) return;
-        e.preventDefault(); lenis.scrollTo(alvo, { offset: -90 });
+        e.preventDefault(); lenis.scrollTo(alvo, { offset: -(topo.offsetHeight + 14) });
       });
     });
   }
@@ -241,35 +253,25 @@
       scrollTrigger: { trigger: el.closest('section'), start: 'top top', end: 'bottom top', scrub: true } });
   });
 
-  var mm = gsap.matchMedia();
-
-  /* PLANTÃO: seção presa só no desktop (>=1101) — em tablet/celular nada fica preso, então nada cobre o título */
-  mm.add('(min-width: 1101px)', function () {
-    var tl = gsap.timeline({
-      scrollTrigger: {
-        trigger: '[data-plantao]', start: 'top top', end: '+=180%',
-        scrub: 1, pin: true,
-        onUpdate: function (s) { marcaPasso(s.progress < .25 ? 0 : s.progress < .5 ? 1 : s.progress < .75 ? 2 : 3); }
-      }
-    });
-    tl.to('.ceu', { background: 'linear-gradient(180deg, #5a4660, #2a2033 55%, #171019)', ease: 'none', duration: 1 }, 0)
-      .to('.sol', { y: 220, opacity: 0, ease: 'power1.in', duration: .6 }, 0)
-      .to('.lua', { opacity: 1, ease: 'power1.out', duration: .6 }, .35)
-      .to('.estrelas', { opacity: .9, ease: 'none', duration: .6 }, .4);
-  });
-  /* tablet e celular (<=1100): sem pin, só acende a jornada e escurece o céu */
-  mm.add('(max-width: 1100px)', function () {
-    gsap.to('.ceu', { background: 'linear-gradient(180deg, #4a3850, #241b2e)', ease: 'none',
-      scrollTrigger: { trigger: '[data-plantao]', start: 'top 70%', end: 'bottom 40%', scrub: true } });
-    gsap.to('.lua', { opacity: 1, scrollTrigger: { trigger: '[data-plantao]', start: 'center 70%', end: 'center 40%', scrub: true } });
-    gsap.to('.sol', { opacity: 0, y: 120, scrollTrigger: { trigger: '[data-plantao]', start: 'top 70%', end: 'center 50%', scrub: true } });
-    ST.create({ trigger: '[data-plantao]', start: 'top 60%', end: 'bottom 40%', onUpdate: function (s) { marcaPasso(Math.min(3, (s.progress * 4) | 0)); } });
-  });
+  /* PLANTÃO: dia→noite + as 4 etapas acendendo, com ROLAGEM NORMAL (sem pin, em todas as larguras — nunca trava, todas as etapas aparecem) */
+  gsap.timeline({
+    scrollTrigger: {
+      trigger: '[data-plantao]', start: 'top 78%', end: 'bottom 55%', scrub: true,
+      onUpdate: function (s) { marcaPasso(Math.min(3, Math.floor(s.progress * 4))); }
+    }
+  })
+    .to('.ceu', { background: 'linear-gradient(180deg, #5a4660, #2a2033 55%, #171019)', ease: 'none', duration: 1 }, 0)
+    .to('.sol', { y: 160, opacity: 0, ease: 'none', duration: .5 }, 0)
+    .to('.lua', { opacity: 1, ease: 'none', duration: .5 }, .4)
+    .to('.estrelas', { opacity: .9, ease: 'none', duration: .5 }, .45);
 
   /* QUEM SOMOS / FAQ: foto se abre por máscara */
   gsap.utils.toArray('.mascara img').forEach(function (img) {
-    gsap.from(img, { scale: 1.2, ease: 'none', scrollTrigger: { trigger: img, start: 'top 90%', end: 'center 50%', scrub: true } });
+    gsap.from(img, { scale: 1.18, ease: 'none', scrollTrigger: { trigger: img, start: 'top 90%', end: 'center 50%', scrub: true } });
   });
+  /* Quem Somos: parallax sutil da foto enquanto rola (a imagem é mais alta que o quadro) */
+  gsap.fromTo('.quem-foto img', { yPercent: 0 }, { yPercent: -9, ease: 'none',
+    scrollTrigger: { trigger: '.quem', start: 'top bottom', end: 'bottom top', scrub: true } });
   gsap.from('.lista-quem li', { y: 24, opacity: 0, stagger: .1, duration: .5, scrollTrigger: { trigger: '.lista-quem', start: 'top 88%' } });
 
   /* SERVIÇOS: cartões entram */
